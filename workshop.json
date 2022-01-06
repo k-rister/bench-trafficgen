@@ -8,24 +8,16 @@
     {
       "name": "centos8",
       "requirements": [
-        "dev-tools",
         "trafficgen-os-dependencies",
+        "install-trex-build-dependencies",
         "pyyaml",
         "trex1",
-        "trex2"
+        "trex2",
+        "remove-trex-build-dependencies"
       ]
     }
   ],
   "requirements": [
-    {
-      "name": "dev-tools",
-      "type": "distro",
-      "distro_info": {
-        "groups": [
-          "\"Development Tools\""
-        ]
-      }
-    },
     {
       "name": "trafficgen-os-dependencies",
       "type": "distro",
@@ -39,6 +31,16 @@
           "numactl-devel",
           "cmake",
           "libarchive"
+        ]
+      }
+    },
+    {
+      "name": "install-trex-build-dependencies",
+      "type": "distro",
+      "distro_info": {
+        "operation": "install",
+        "groups": [
+          "\"Development Tools\""
         ]
       }
     },
@@ -73,8 +75,18 @@
       "type": "manual",
       "manual_info": {
         "commands": [
-          "/usr/bin/install-trex.sh --insecure",
+          "/usr/bin/install-trex.sh",
           "/usr/bin/install-moongen.sh"
+        ]
+      }
+    },
+    {
+      "name": "remove-trex-build-dependencies",
+      "type": "distro",
+      "distro_info": {
+        "operation": "remove",	    
+        "groups": [
+          "\"Development Tools\""
         ]
       }
     }

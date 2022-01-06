@@ -113,7 +113,7 @@ def create_teaching_measurement_traffic_profile (direction, other_direction, dev
 
      return
 
-def create_traffic_profile (direction, device_pair, rate_multiplier, port_speed):
+def create_traffic_profile (direction, device_pair, rate_multiplier, port_speed, use_ieee_1588):
      streams = { 'default': { 'protocol': [],
                               'pps': [],
                               'pg_ids': [],
@@ -302,7 +302,10 @@ def create_traffic_profile (direction, device_pair, rate_multiplier, port_speed)
                if streams_packet_type == "default" and not t_global.args.skip_hw_flow_stats:
                     stream_flow_stats = STLFlowStats(pg_id = stream_pg_id)
                elif streams_packet_type == "latency":
-                    stream_flow_stats = STLFlowLatencyStats(pg_id = stream_pg_id)
+                    if use_ieee_1588:
+                         stream_flow_stats = STLFlowLatencyStats(pg_id = stream_pg_id, ieee_1588 = True)
+                    else:
+                         stream_flow_stats = STLFlowLatencyStats(pg_id = stream_pg_id)
                device_pair[direction]['pg_ids'][streams_packet_type]['list'].append(stream_pg_id)
 
                stream_loop = False
@@ -324,13 +327,19 @@ def create_traffic_profile (direction, device_pair, rate_multiplier, port_speed)
                elif stream_mode == "continuous":
                     stream_mode_obj = STLTXCont(pps = stream_pps)
 
+               stream_destination_port = device_pair[direction]['packet_values']['ports']['dst']
+               if streams_packet_type == "latency" and use_ieee_1588:
+                    stream_frame_size = 106
+                    stream_packet_protocol = "UDP"
+                    stream_destination_port = 319
+
                stream_packet = create_generic_pkt(stream_frame_size,
                                                   device_pair[direction]['packet_values']['macs']['src'],
                                                   device_pair[direction]['packet_values']['macs']['dst'],
                                                   device_pair[direction]['packet_values']['ips']['src'],
                                                   device_pair[direction]['packet_values']['ips']['dst'],
                                                   device_pair[direction]['packet_values']['ports']['src'],
-                                                  device_pair[direction]['packet_values']['ports']['dst'],
+                                                  stream_destination_port,
                                                   stream_packet_protocol,
                                                   device_pair[direction]['packet_values']['vlan'],
                                                   t_global.args.flow_mods,
@@ -898,8 +907,20 @@ def main():
         myprint("PARSABLE PORT INFO: %s" % dump_json_parsable(port_info), stderr_only = True)
 
         port_speed_verification_fail = False
+        use_ieee_1588_latency_packets = False
 
         for device_pair in device_pairs:
+             if 'is_ieee1588_supported' in port_info[device_pair['->']['ports']['tx']] and 'is_ieee1588_supported' in port_info[device_pair['<-']['ports']['tx']]:
+                  if port_info[device_pair['->']['ports']['tx']]['is_ieee1588_supported'] != 'yes':
+                       myprint("Device pair '%s' port %d does not support IEEE 1588" % (device_pair['device_pair'], device_pair['->']['ports']['tx']))
+                       use_ieee_1588_latency_packets = False
+                  if port_info[device_pair['<-']['ports']['tx']]['is_ieee1588_supported'] != 'yes':
+                       myprint("Device pair '%s' port %d does not support IEEE 1588" % (device_pair['device_pair'], device_pair['<-']['ports']['tx']))
+                       use_ieee_1588_latency_packets = False
+             else:
+                  myprint("TRex IEEE 1588 Latency support not available for device pair '%s'" % (device_pair['device_pair']))
+                  use_ieee_1588_latency_packets = False
+
              if port_info[device_pair['->']['ports']['tx']]['speed'] == 0:
                   port_speed_verification_fail = True
                   myprint(error("Device with port index = %d failed speed verification test" % (device_pair['->']['ports']['tx'])))
@@ -931,6 +952,11 @@ def main():
 
         if port_speed_verification_fail:
              raise RuntimeError("Failed port speed verification")
+
+        if use_ieee_1588_latency_packets:
+             myprint("Latency packet type: IEEE 1588")
+        else:
+             myprint("Latency packet type: software")
 
         if t_global.args.flow_mods['port']['src'] or t_global.args.flow_mods['port']['dst']:
              if t_global.args.num_flows >= 1000:
@@ -1073,7 +1099,7 @@ def main():
 
         for device_pair in device_pairs:
              if t_global.args.run_revunidirec:
-                  create_traffic_profile("<-", device_pair, rate_multiplier, (port_info[device_pair['<-']['ports']['tx']]['speed'] * 1000 * 1000 * 1000))
+                  create_traffic_profile("<-", device_pair, rate_multiplier, (port_info[device_pair['<-']['ports']['tx']]['speed'] * 1000 * 1000 * 1000), use_ieee_1588_latency_packets)
 
                   if t_global.args.send_teaching_warmup:
                        create_teaching_warmup_traffic_profile("<-", "->", device_pair)
@@ -1081,7 +1107,7 @@ def main():
                   if t_global.args.send_teaching_measurement:
                        create_teaching_measurement_traffic_profile("<-", "->", device_pair)
              else:
-                  create_traffic_profile("->", device_pair, rate_multiplier, (port_info[device_pair['->']['ports']['tx']]['speed'] * 1000 * 1000 * 1000))
+                  create_traffic_profile("->", device_pair, rate_multiplier, (port_info[device_pair['->']['ports']['tx']]['speed'] * 1000 * 1000 * 1000), use_ieee_1588_latency_packets)
 
                   if t_global.args.send_teaching_warmup:
                        create_teaching_warmup_traffic_profile("->", "<-", device_pair)
@@ -1090,7 +1116,7 @@ def main():
                        create_teaching_measurement_traffic_profile("->", "<-", device_pair)
 
                   if t_global.args.run_bidirec:
-                       create_traffic_profile("<-", device_pair, rate_multiplier, (port_info[device_pair['<-']['ports']['tx']]['speed'] * 1000 * 1000 * 1000))
+                       create_traffic_profile("<-", device_pair, rate_multiplier, (port_info[device_pair['<-']['ports']['tx']]['speed'] * 1000 * 1000 * 1000), use_ieee_1588_latency_packets)
 
                        if t_global.args.send_teaching_warmup:
                             create_teaching_warmup_traffic_profile("<-", "->", device_pair)

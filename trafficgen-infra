@@ -146,7 +146,7 @@ else
     cat $trex_cfg
     echo
 
-    trex_server_cmd="./$trex_bin -i --checksum-offload --cfg $trex_cfg --iom 0 -v 4 --prefix trafficgen_trex_ --mlx5-so --close-at-end"
+    trex_server_cmd="./$trex_bin -i --checksum-offload --cfg $trex_cfg --iom 0 -v 4 --prefix trafficgen_trex_ --close-at-end"
     echo "about to run: $trex_server_cmd"
     $trex_server_cmd >$sample_dir/trex-server-stderrout.txt 2>&1 &
     echo $! >$sample_dir/trex-server-pid.txt

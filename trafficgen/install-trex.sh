@@ -4,13 +4,13 @@ full_script_path=$(readlink -e ${0})
 tgen_dir=$(dirname ${full_script_path})
 
 base_dir="/opt/trex"
+repo_name="trex-core"
 tmp_dir="/tmp"
-trex_ver="v2.87"
-insecure_curl=0
+trex_ver="v2.93"
 force_install=0
 toolbox_url=https://github.com/perftool-incubator/toolbox.git
 
-opts=$(getopt -q -o c: --longoptions "tmp-dir:,base-dir:,version:,insecure,force" -n "getopt.sh" -- "$@")
+opts=$(getopt -q -o c: --longoptions "tmp-dir:,base-dir:,version:,force" -n "getopt.sh" -- "$@")
 if [ $? -ne 0 ]; then
     printf -- "$*\n"
     printf -- "\n"
@@ -27,11 +27,6 @@ if [ $? -ne 0 ]; then
     printf -- "--version=str\n"
     printf -- "  Version of TRex to install\n"
     printf -- "  Default is ${trex_ver}\n"
-    printf -- "\n"
-    printf -- "--insecure\n"
-    printf -- "  Disable SSL cert verification for the TRex download site.\n"
-    printf -- "  Some environments require this due to the usage of an uncommon CA.\n"
-    printf -- "  Do not use this option if you do not understand the implications.\n"
     printf -- "\n"
     printf -- "--force\n"
     printf -- "  Download and install TRex even if it is already present.\n"
@@ -61,10 +56,6 @@ while true; do
 		shift
 	    fi
 	    ;;
-	--insecure)
-	    shift
-	    insecure_curl=1
-	    ;;
 	--force)
 	    shift
 	    force_install=1
@@ -81,8 +72,7 @@ while true; do
     esac
 done
 
-trex_url=https://trex-tgn.cisco.com/trex/release/${trex_ver}.tar.gz
-trex_dir="${base_dir}/${trex_ver}"
+trex_dir="${base_dir}/trex-core"
 
 if [ -d ${trex_dir} -a "${force_install}" == "0" ]; then
     echo "TRex ${trex_ver} already installed"
@@ -93,33 +83,53 @@ else
 
     mkdir -p ${base_dir}
     if pushd ${base_dir} >/dev/null; then
-	tarfile="${tmp_dir}/${trex_ver}.tar.gz"
-	/bin/rm -f ${tarfile}
-	curl_args=""
-	if [ "${insecure_curl}" == "1" ]; then
-	    curl_args="-k"
-	fi
-	echo "Downloading TRex ${trex_ver} from ${trex_url}..."
-	curl ${curl_args} --silent --output ${tarfile} ${trex_url}
-	curl_rc=$?
-	if [ "${curl_rc}" == "0" ]; then
-	    if tar zxf ${tarfile}; then
-		/bin/rm ${tarfile}
-		echo "installed TRex ${trex_ver} from ${trex_url}"
+	echo "Git cloning trex-core:"
+	git clone https://github.com/cisco-system-traffic-generator/trex-core.git
+	if pushd trex-core > /dev/null; then
+	    echo "Git remotes:"
+	    git remote -v
+
+	    echo "Git status:"
+	    git status
+
+	    echo "Git tags:"
+	    git tag -l
+
+	    echo "Checking out git tag (${trex_ver}):"
+	    git checkout ${trex_ver}
+
+	    echo "Git status:"
+	    git status
+
+	    # enabled IEEE 1588
+	    echo "Enabling IEEE1588 latency testing:"
+	    grep IEEE1588 src/pal/linux_dpdk/dpdk_2102_x86_64/rte_config.h
+	    sed -i -e "s|^//\(#define.*IEEE1588.*\)|\1|" src/pal/linux_dpdk/dpdk_2102_x86_64/rte_config.h
+	    grep IEEE1588 src/pal/linux_dpdk/dpdk_2102_x86_64/rte_config.h
+
+	    # build it
+	    if pushd linux_dpdk; then
+		echo "Configure:"
+		if ! ./b configure --no-mlx=NO_MLX; then
+		    echo "ERROR: Failed to configure TRex build"
+		    exit 1
+		fi
+
+		echo "Build:"
+		if ! ./b build; then
+		    echo "ERROR: Failed to build TRex"
+		    exit 1
+		fi
 	    else
-		echo "ERROR: could not unpack ${tarfile} for TRex ${trex_ver}"
+		echo "ERROR: Failed to pushd to linux_dpdk!"
 		exit 1
 	    fi
+
+	    popd > /dev/null
 	else
-	    if [ "${curl_rc}" == "60" ]; then
-		echo "ERROR: SSL certificate failed validation on TRex download.  Run --help and see --insecure option"
-		exit 1
-	    else
-		echo "ERROR: TRex download failed (curl return code is ${curl_rc})"
-		exit 1
-	    fi
+	    echo "ERROR: Failed to git clone trex-core"
+	    exit 1
 	fi
-	popd >/dev/null
     else
 	echo "ERROR: Could not use ${base_dir}"
 	exit 1
@@ -130,7 +140,7 @@ fi
 # same location for trex
 if pushd ${base_dir} >/dev/null; then
     /bin/rm -f current 2>/dev/null
-    ln -sf ${trex_ver} current
+    ln -sf trex-core/scripts current
     popd >/dev/null
 fi
 
