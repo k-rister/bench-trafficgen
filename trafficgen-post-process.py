@@ -396,6 +396,8 @@ def main():
                 for lm in TRIAL_LATENCY_METRICS:
                     if lm["field"] in dir_stats:
                         desc = {"class": lm["class"], "source": "trafficgen-ptp-latency", "type": lm["type"], "default-aggregation": lm["default-aggregation"]}
+                        if "disallowed-aggregations" in lm:
+                            desc["disallowed-aggregations"] = lm["disallowed-aggregations"]
                         sample = {"end": trial_end, "begin": trial_begin, "value": dir_stats[lm["field"]]}
                         metrics.log_sample(period_name, add_aggregation_constraints(desc), names, sample)
 
