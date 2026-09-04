@@ -131,6 +131,20 @@ TRIAL_PROFILER_METRICS = [
 ]
 
 
+def build_metric_desc(metric, source):
+    """Build a descriptor while preserving metric-specific aggregation policy."""
+    desc = {
+        "class": metric["class"],
+        "source": source,
+        "type": metric["type"],
+    }
+    if "default-aggregation" in metric:
+        desc["default-aggregation"] = metric["default-aggregation"]
+    if "disallowed-aggregations" in metric:
+        desc["disallowed-aggregations"] = metric["disallowed-aggregations"]
+    return add_aggregation_constraints(desc)
+
+
 def add_aggregation_constraints(desc):
     """Declare aggregations that cannot represent this metric's semantics."""
     if "disallowed-aggregations" not in desc and desc.get("class") in ("latency", "percentage"):
@@ -215,7 +229,7 @@ def process_profiler_data(trial, period_name, metrics):
                                 value -= prev_val
                                 value /= (ts_float - prev_float)
 
-                    desc = {"class": pm["class"], "source": source, "type": pm["type"], "default-aggregation": pm["default-aggregation"]}
+                    desc = build_metric_desc(pm, source)
                     sample = {"end": int(ts_float), "begin": int(prev_float), "value": value}
                     metrics.log_sample(period_name, add_aggregation_constraints(desc), {}, sample)
 
@@ -236,7 +250,7 @@ def process_profiler_data(trial, period_name, metrics):
                                 value -= prev_val
                                 value /= (ts_float - prev_float)
 
-                        desc = {"class": pm["class"], "source": source, "type": pm["type"], "default-aggregation": pm["default-aggregation"]}
+                        desc = build_metric_desc(pm, source)
                         sample = {"end": int(ts_float), "begin": int(prev_float), "value": value}
                         names = {pm["extra_field"]: port}
                         metrics.log_sample(period_name, add_aggregation_constraints(desc), names, sample)
@@ -262,7 +276,7 @@ def process_profiler_data(trial, period_name, metrics):
                                     value -= prev_pgid_data[pm["field"]]
                                     value /= (ts_float - prev_float)
 
-                        desc = {"class": pm["class"], "source": source, "type": pm["type"], "default-aggregation": pm["default-aggregation"]}
+                        desc = build_metric_desc(pm, source)
                         sample = {"end": int(ts_float), "begin": int(prev_float), "value": value}
                         names = {pm["extra_field"]: pgid}
                         metrics.log_sample(period_name, add_aggregation_constraints(desc), names, sample)
@@ -289,7 +303,7 @@ def process_profiler_data(trial, period_name, metrics):
                                         value -= prev_pgid_subkey[port]
                                         value /= (ts_float - prev_float)
 
-                            desc = {"class": pm["class"], "source": source, "type": pm["type"], "default-aggregation": pm["default-aggregation"]}
+                            desc = build_metric_desc(pm, source)
                             sample = {"end": int(ts_float), "begin": int(prev_float), "value": value}
                             names = {pm["field"]: pgid, pm["extra_field"]: port}
                             metrics.log_sample(period_name, add_aggregation_constraints(desc), names, sample)
@@ -346,7 +360,7 @@ def main():
         metrics = CDMMetrics()
 
         for tm in TRIAL_METRICS:
-            desc = {"class": tm["class"], "source": "trafficgen", "type": tm["type"]}
+            desc = build_metric_desc(tm, "trafficgen")
             if "altvalue" in tm and "altkey" in tm:
                 desc["value-format"] = "status"
                 metric_value = 1 if trial.get(tm["altkey"]) == "pass" else 0
@@ -364,14 +378,14 @@ def main():
             print("ASTF trial detected -- extracting ASTF metrics")
             astf_stats = trial["stats"]["astf"]
             for am in TRIAL_STATS_ASTF_METRICS:
-                desc = {"class": am["class"], "source": "trafficgen", "type": am["type"], "default-aggregation": am["default-aggregation"]}
+                desc = build_metric_desc(am, "trafficgen")
                 value = astf_stats.get(am["field"], 0) or 0
                 sample = {"end": trial_end, "begin": trial_begin, "value": value}
                 metrics.log_sample(period_name, add_aggregation_constraints(desc), {}, sample)
         else:
             for dev_pair in trial["trial_params"].get("test_dev_pairs", []):
                 for tsdm in TRIAL_STATS_DEVICE_METRICS:
-                    desc = {"class": tsdm["class"], "source": "trafficgen", "type": tsdm["type"], "default-aggregation": tsdm["default-aggregation"]}
+                    desc = build_metric_desc(tsdm, "trafficgen")
                     value = trial["stats"].get(str(dev_pair[tsdm["key"]]), {}).get(tsdm["field"], 0)
                     sample = {"end": trial_end, "begin": trial_begin, "value": value}
                     names = {"tx_port": dev_pair["tx"], "rx_port": dev_pair["rx"], "port_pair": dev_pair["dev_pair"]}
@@ -395,16 +409,14 @@ def main():
 
                 for lm in TRIAL_LATENCY_METRICS:
                     if lm["field"] in dir_stats:
-                        desc = {"class": lm["class"], "source": "trafficgen-ptp-latency", "type": lm["type"], "default-aggregation": lm["default-aggregation"]}
-                        if "disallowed-aggregations" in lm:
-                            desc["disallowed-aggregations"] = lm["disallowed-aggregations"]
+                        desc = build_metric_desc(lm, "trafficgen-ptp-latency")
                         sample = {"end": trial_end, "begin": trial_begin, "value": dir_stats[lm["field"]]}
                         metrics.log_sample(period_name, add_aggregation_constraints(desc), names, sample)
 
                 for pm in TRIAL_LATENCY_PERCENTILE_METRICS:
                     pct_val = dir_stats.get("percentiles", {}).get(pm["pct"])
                     if pct_val is not None:
-                        desc = {"class": pm["class"], "source": "trafficgen-ptp-latency", "type": pm["type"], "default-aggregation": pm["default-aggregation"]}
+                        desc = build_metric_desc(pm, "trafficgen-ptp-latency")
                         sample = {"end": trial_end, "begin": trial_begin, "value": pct_val}
                         metrics.log_sample(period_name, add_aggregation_constraints(desc), names, sample)
 
